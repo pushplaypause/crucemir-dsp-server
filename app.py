@@ -6,7 +6,7 @@ from ffmpeg.ffmpeg_handler import run_ffmpeg_mix
 from mastering.mastering_handler import run_mastering
 from melody.melody_handler import extract_melody
 from chord.chord_handler import detect_chords
-from openvoice.openvoice_handler import run_openvoice
+from openvoice_service.openvoice_handler import run_openvoice
 from sovits.sovits_handler import run_sovits
 from essentia.essentia_handler import run_essentia
 
