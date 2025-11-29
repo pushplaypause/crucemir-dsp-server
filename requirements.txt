@@ -6,7 +6,6 @@ requests
 pyloudnorm
 scipy
 soundfile
-essentia==2.1b6.dev1389
 openvoice-cli==0.0.5
 ctranslate2
 faster-whisper
