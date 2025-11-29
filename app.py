@@ -53,7 +53,7 @@ def health():
             "/chord/detect",
             "/openvoice/say",
             "/sovits/sing",
-            "/dsp/analyze"  # librosa version of DSP analysis
+            "/dsp/analyze"
         ]
     })
 
@@ -119,8 +119,8 @@ def sovits_route():
 # ---------------------------------
 @app.post("/dsp/analyze")
 def dsp_route():
-    audio_url = request.json.get("audio_url")
-    return analyze_audio_with_librosa(audio_url)
+    audio_bytes = request.data
+    return analyze_audio_with_librosa(audio_bytes)
 
 # ---------------------------------
 # ENTRYPOINT FOR GUNICORN
