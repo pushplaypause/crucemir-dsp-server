@@ -9,7 +9,6 @@ librosa
 demucs
 essentia
 crepe
-aubio
 pychorus
 torch
 torchaudio
