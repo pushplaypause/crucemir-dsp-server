@@ -1,14 +1,17 @@
-from flask import jsonify
-import base64
-from sovits import SoVITS
+import subprocess
+import uuid
+import os
 
-def run_sovits(lyrics, melody_midi):
-    model = SoVITS("./sovits/models/vale_singing.pth")
+def run_sovits(audio_path, speaker="default"):
+    output_path = f"/tmp/sovits_{uuid.uuid4()}.wav"
 
-    audio = model.sing(lyrics, melody_midi)
-    audio_bytes = audio.tobytes()
+    cmd = [
+        "sovits-cli",
+        "--input", audio_path,
+        "--speaker", speaker,
+        "--output", output_path
+    ]
 
-    return jsonify({
-        "audio": base64.b64encode(audio_bytes).decode(),
-        "success": True
-    })
+    subprocess.run(cmd, check=True)
+
+    return output_path
