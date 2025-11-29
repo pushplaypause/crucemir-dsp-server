@@ -1,29 +1,47 @@
-import tempfile, os, base64, requests, subprocess
-from flask import jsonify
+import os
+import tempfile
+import subprocess
+import requests
+import uuid
 
 def run_demucs(audio_url):
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Download audio
-        input_path = os.path.join(tmpdir, "input.wav")
-        r = requests.get(audio_url)
-        with open(input_path, "wb") as f:
-            f.write(r.content)
+    """
+    Input: audio_url
+    Output: [
+        { "name": "vocal", "url": "..." },
+        { "name": "drums", "url": "..." },
+        ...
+    ]
+    """
 
-        # Run Demucs
-        output_dir = os.path.join(tmpdir, "out")
-        subprocess.run([
-            "python", "-m", "demucs", "-n", "htdemucs",
-            "--out", output_dir, input_path
-        ], check=True)
+    # Download audio
+    input_path = tempfile.mktemp(suffix=".wav")
+    with open(input_path, "wb") as f:
+        f.write(requests.get(audio_url).content)
 
-        # Locate stems
-        stems_dir = os.path.join(output_dir, "htdemucs", "input")
-        stems = {}
+    # Output stem folder
+    prefix = uuid.uuid4().hex
+    output_dir = f"/tmp/demucs_{prefix}"
+    os.makedirs(output_dir, exist_ok=True)
 
-        for name in ["vocals", "drums", "bass", "other"]:
-            path = os.path.join(stems_dir, f"{name}.wav")
-            if os.path.exists(path):
-                with open(path, "rb") as f:
-                    stems[name] = base64.b64encode(f.read()).decode()
+    # Run Demucs
+    cmd = [
+        "python3", "-m", "demucs.separate",
+        "-o", output_dir,
+        input_path
+    ]
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-        return jsonify({"success": True, "stems": stems})
+    # Path to stems
+    stems_dir = os.path.join(output_dir, "htdemucs", os.path.basename(input_path).split(".")[0])
+
+    stems = []
+    for stem_file in os.listdir(stems_dir):
+        if stem_file.endswith(".wav"):
+            src = os.path.join(stems_dir, stem_file)
+            name = stem_file.replace(".wav", "")
+            dest = f"/tmp/{prefix}_{stem_file}"
+            os.rename(src, dest)
+            stems.append({"name": name, "path": dest})
+
+    return stems

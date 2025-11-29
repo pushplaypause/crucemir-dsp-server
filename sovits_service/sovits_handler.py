@@ -1,82 +1,89 @@
-import uuid
-import json
-import subprocess
 import tempfile
-import os
+import requests
+import numpy as np
+import librosa
 import soundfile as sf
+import scipy.signal as signal
 
-# -----------------------------------------------------
-# ADVANCED SOVITS SINGING ENGINE
-# -----------------------------------------------------
 
-def extract_sovits_features(audio_path: str):
+def enhance_sovits(audio_bytes):
     """
-    Extract conditioning embeddings for SoVITS.
-    Uses the SoVITS CLI extractor.
-    """
-
-    tmp_json = f"/tmp/sovits_features_{uuid.uuid4()}.json"
-
-    cmd = [
-        "sovits-cli",
-        "extract",
-        "--input", audio_path,
-        "--output", tmp_json
-    ]
-
-    subprocess.run(cmd, check=True)
-
-    return tmp_json
-
-
-def run_sovits_singing(lyrics: str, midi_data: bytes, persona: dict, vocal_mode="neutral"):
-    """
-    Run SoVITS singing:
-    - lyrics.txt
-    - melody.mid (raw bytes)
-    - persona features.json
-    - vocal mode (0–3)
+    HQ post-processing chain for SoVITS output.
+    Input: raw WAV bytes
+    Output: enhanced WAV bytes
     """
 
-    # Temp paths
-    tmp_lyrics = f"/tmp/lyrics_{uuid.uuid4()}.txt"
-    tmp_midi = f"/tmp/midi_{uuid.uuid4()}.mid"
-    output_wav = f"/tmp/sovits_{uuid.uuid4()}.wav"
+    # ----------------------------------------------------
+    # Load from bytes → temp WAV
+    # ----------------------------------------------------
+    in_path = tempfile.mktemp(suffix=".wav")
+    with open(in_path, "wb") as f:
+        f.write(audio_bytes)
 
-    # Save lyrics
-    with open(tmp_lyrics, "w") as f:
-        f.write(lyrics)
+    y, sr = librosa.load(in_path, sr=44100)
+    y = y.astype(np.float32)
 
-    # Save MIDI (raw bytes)
-    with open(tmp_midi, "wb") as f:
-        f.write(midi_data)
 
-    # Resolve persona features path
-    features_path = persona["features_path"]
+    # ----------------------------------------------------
+    # 1. De-mud (cut 300–600 Hz)
+    # ----------------------------------------------------
+    mud = librosa.effects.bandpass(y, sr=sr, low=300, high=600)
+    cleaned = y - mud * 0.45
 
-    # Vocal mode mapping
-    mode_map = {
-        "neutral": "0",
-        "whisper": "1",
-        "ghost": "2",
-        "aggressive": "3"
-    }
 
-    mode_code = mode_map.get(vocal_mode, "0")
+    # ----------------------------------------------------
+    # 2. Presence Boost (2.5–4.5 kHz)
+    # ----------------------------------------------------
+    presence = librosa.effects.bandpass(y, sr=sr, low=2500, high=4500)
+    cleaned += presence * 0.35
 
-    # Build command
-    cmd = [
-        "sovits-cli",
-        "sing",
-        "--lyrics", tmp_lyrics,
-        "--midi", tmp_midi,
-        "--features", features_path,
-        "--vocal-mode", mode_code,
-        "--output", output_wav
-    ]
 
-    subprocess.run(cmd, check=True)
+    # ----------------------------------------------------
+    # 3. Air Boost (8–12 kHz)
+    # ----------------------------------------------------
+    air = librosa.effects.bandpass(y, sr=sr, low=8000, high=12000)
+    cleaned += air * 0.50
 
-    # Return rendered WAV as bytes
-    audio_bytes, sr = sf.read(output_wav, dtype='float32')
-    return audio_bytes.tobytes()
+
+    # ----------------------------------------------------
+    # 4. Tube Harmonics (soft saturation)
+    # ----------------------------------------------------
+    saturated = cleaned + 0.12 * (cleaned ** 3)
+    saturated = saturated / max(1e-6, np.max(np.abs(saturated)))
+
+
+    # ----------------------------------------------------
+    # 5. De-Esser (sibilance reduction)
+    # ----------------------------------------------------
+    sibilance = librosa.effects.bandpass(y, sr=sr, low=5000, high=8000)
+    deessed = saturated - sibilance * 0.25
+
+
+    # ----------------------------------------------------
+    # 6. Stereo Widening (analog drift)
+    # ----------------------------------------------------
+    shift = int(sr * 0.0006)
+    left = np.roll(deessed, shift)
+    right = np.roll(deessed, -shift)
+
+    stereo = np.stack([left, right], axis=1)
+
+    # Normalize before limiter
+    max_amp = max(1e-6, np.max(np.abs(stereo)))
+    stereo = stereo / max_amp * 0.95
+
+
+    # ----------------------------------------------------
+    # 7. Soft Limiter
+    # ----------------------------------------------------
+    stereo = np.tanh(stereo * 1.2).astype(np.float32)
+
+
+    # ----------------------------------------------------
+    # 8. Save to temp output file
+    # ----------------------------------------------------
+    out_path = tempfile.mktemp(suffix=".wav")
+    sf.write(out_path, stereo, sr)
+
+    with open(out_path, "rb") as f:
+        return f.read()

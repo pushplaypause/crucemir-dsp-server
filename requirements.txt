@@ -1,49 +1,64 @@
-##############################################
-# 🔥 CORE SERVER
-##############################################
-flask
-flask-cors
-gunicorn
-requests
+#############################
+# CORE SERVER
+#############################
+flask==3.0.2
+flask-cors==4.0.0
+gunicorn==23.0.0
+requests==2.32.2
 
-##############################################
-# 🔊 AUDIO / DSP PROCESSING
-##############################################
+#############################
+# NUMERIC / DSP CORE
+#############################
 numpy==1.26.4
-scipy==1.10.1
-soundfile
-librosa==0.10.1
-mido
+scipy==1.11.4
+soundfile==0.12.1
+pyloudnorm==0.1.0
+pydub==0.25.1
 
-ffmpeg-python
-pydub
+#############################
+# MUSIC DSP / ML
+#############################
+librosa==0.9.1          # REQUIRED for SoVITS + OpenVoice stability
+numba==0.58.1
+resampy==0.4.3
 
-##############################################
-# 🤖 MACHINE LEARNING (CPU-Optimized)
-##############################################
+#############################
+# TORCH + AUDIO MODELS CPU
+#############################
 torch==2.2.2
 torchaudio==2.2.2
-protobuf
-transformers
-accelerate
-sentencepiece
 
-##############################################
-# 🎵 MUSIC / VOICE MODELS
-##############################################
+#############################
+# VOICE MODELS
+#############################
+faster-whisper==0.10.0
+ctranslate2==4.2.0
+whisper-timestamped==1.15.2
+
+#############################
+# MUSIC MODELS
+#############################
 demucs==4.0.1
-crepe
-faster-whisper
-ctranslate2
-whisper-timestamped
+julius==0.2.7
+pychorus==0.1.1
+openunmix==1.2.1
 
-##############################################
-# 🗣️ SoVITS / OPENVOICE / PERSONA ENGINE
-##############################################
-openvoice-cli==0.0.5   # CLI ONLY
+#############################
+# SOVITS / TTS
+#############################
+# Using your custom SoVITS implementation — NO OpenVoice
+TTS==0.22.0
 
-##############################################
-# 🎨 IMAGE GENERATION (COVER ART)
-##############################################
-Pillow
-openai
+#############################
+# IMAGE / COVER ART
+#############################
+Pillow==10.3.0
+openai==1.52.0
+
+#############################
+# MISC
+#############################
+protobuf==4.25.3
+sentencepiece==0.2.0
+accelerate==0.28.0
+transformers==4.40.1
