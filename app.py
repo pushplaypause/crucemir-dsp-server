@@ -10,6 +10,7 @@ from chord_service.chord_handler import detect_chords
 from openvoice_service.openvoice_handler import run_openvoice
 from sovits_service.sovits_handler import run_sovits
 from librosa_service.librosa_handler import analyze_audio_with_librosa
+from musicgen_service.musicgen_handler import generate_music
 
 app = Flask(__name__)
 
@@ -104,6 +105,21 @@ def chord_route():
 def openvoice_route():
     text = request.json.get("text")
     return run_openvoice(text)
+
+# ---------------------------------
+# 🗣️ GENERATE INSTRUMENTAL
+# ---------------------------------
+@app.post("/gen/instrumental")
+def gen_instrumental():
+    data = request.json
+
+    prompt = data.get("prompt")
+    duration = data.get("duration", 32)
+    bpm = data.get("bpm", None)
+    seed = data.get("seed", None)
+
+    result = generate_music(prompt, duration, bpm, seed)
+    return jsonify(result)
 
 # ---------------------------------
 # 🎤 SOVITS — Vale Singing

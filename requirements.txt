@@ -21,3 +21,4 @@ pychorus
 whisper-timestamped
 wavmark
 flask-cors
+requests
