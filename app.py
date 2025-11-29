@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-# Import service handlers
+# Import microservice handlers
 from demucs_service.demucs_handler import run_demucs
 from ffmpeg_service.ffmpeg_handler import run_ffmpeg_mix
 from mastering_service.mastering_handler import run_mastering
@@ -12,7 +13,33 @@ from librosa_service.librosa_handler import analyze_audio_with_librosa
 
 app = Flask(__name__)
 
-# HEALTH CHECK
+# ---------------------------------
+# 🔥 ENABLE CORS FOR BASE44 ACCESS
+# ---------------------------------
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://app.base44.com",
+            "https://*.base44.com",
+            "https://crucemir-admin.base44.com"
+        ],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "supports_credentials": True
+    }
+})
+
+# ---------------------------------
+# 🔥 ALLOW OPTIONS PREFLIGHT REQUESTS
+# ---------------------------------
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        return "", 200
+
+# ---------------------------------
+# HEALTH CHECK ENDPOINT
+# ---------------------------------
 @app.get("/health")
 def health():
     return jsonify({
@@ -26,87 +53,77 @@ def health():
             "/chord/detect",
             "/openvoice/say",
             "/sovits/sing",
-            "/dsp/analyze"
+            "/dsp/analyze"  # librosa version of DSP analysis
         ]
     })
 
-# -------------------------------------------------------
-# 🌑 1. DEMUCS STEM SEPARATION
-# -------------------------------------------------------
+# ---------------------------------
+# 🎵 DEMUCS STEM SEPARATION
+# ---------------------------------
 @app.post("/demucs/separate")
 def demucs_route():
     audio_url = request.json.get("audio_url")
     return run_demucs(audio_url)
 
-# -------------------------------------------------------
-# 🌑 2. FFMPEG MIXING / ASSEMBLY
-# -------------------------------------------------------
+# ---------------------------------
+# 🎛️ FFMPEG MIXING & STEM ASSEMBLY
+# ---------------------------------
 @app.post("/ffmpeg/assemble")
 def ffmpeg_route():
     tracks = request.json.get("tracks")
     return run_ffmpeg_mix(tracks)
 
-# -------------------------------------------------------
-# 🌑 3. MASTERING SERVICE
-# -------------------------------------------------------
+# ---------------------------------
+# 🔊 MASTERING (LOUDNESS)
+# ---------------------------------
 @app.post("/mastering/loudness")
 def mastering_route():
     audio_url = request.json.get("audio_url")
     return run_mastering(audio_url)
 
-# -------------------------------------------------------
-# 🌑 4. MELODY EXTRACTION
-# -------------------------------------------------------
+# ---------------------------------
+# 🎼 MELODY EXTRACTION
+# ---------------------------------
 @app.post("/melody/extract")
 def melody_route():
     audio_url = request.json.get("audio_url")
     return extract_melody(audio_url)
 
-# -------------------------------------------------------
-# 🌑 5. CHORD DETECTION
-# -------------------------------------------------------
+# ---------------------------------
+# 🎸 CHORD DETECTION
+# ---------------------------------
 @app.post("/chord/detect")
 def chord_route():
     audio_url = request.json.get("audio_url")
     return detect_chords(audio_url)
 
-# -------------------------------------------------------
-# 🌑 6. OPENVOICE (Vale TTS Mode)
-# -------------------------------------------------------
+# ---------------------------------
+# 🗣️ OPENVOICE — Vale TTS
+# ---------------------------------
 @app.post("/openvoice/say")
 def openvoice_route():
     text = request.json.get("text")
     return run_openvoice(text)
 
-# -------------------------------------------------------
-# 🌑 7. SOVITS (Vale Singing Mode)
-# -------------------------------------------------------
+# ---------------------------------
+# 🎤 SOVITS — Vale Singing
+# ---------------------------------
 @app.post("/sovits/sing")
 def sovits_route():
     lyrics = request.json.get("lyrics")
     melody_midi = request.json.get("melody_midi")
     return run_sovits(lyrics, melody_midi)
 
-# -------------------------------------------------------
-# 🌑 8. LIBROSA DSP ANALYSIS (Replaces Essentia)
-# -------------------------------------------------------
+# ---------------------------------
+# 🎚️ DSP ANALYSIS (Librosa)
+# ---------------------------------
 @app.post("/dsp/analyze")
 def dsp_route():
-    if "audio" not in request.files:
-        return jsonify({"error": "No audio file uploaded"}), 400
+    audio_url = request.json.get("audio_url")
+    return analyze_audio_with_librosa(audio_url)
 
-    file = request.files["audio"]
-    tmp_path = "/tmp/input.wav"
-    file.save(tmp_path)
-
-    result = analyze_audio_with_librosa(tmp_path)
-    return jsonify({
-        "status": "ok",
-        "analysis": result
-    })
-
-# -------------------------------------------------------
-# ENTRYPOINT (Gunicorn will override this)
-# -------------------------------------------------------
+# ---------------------------------
+# ENTRYPOINT FOR GUNICORN
+# ---------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

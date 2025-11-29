@@ -20,3 +20,4 @@ julius
 pychorus
 whisper-timestamped
 wavmark
+flask-cors
