@@ -1,21 +1,28 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-# ------------------------ IMPORT SERVICES ------------------------
+# ------------------------ CORE DSP SERVICES ------------------------
 from demucs_service.demucs_handler import run_demucs
 from ffmpeg_service.ffmpeg_handler import run_ffmpeg_mix
 from mastering_service.mastering_handler import run_mastering
 from melody_service.melody_handler import extract_melody
 from chord_service.chord_handler import detect_chords
-from sovits_service.sovits_handler import run_sovits
 from librosa_service.librosa_handler import analyze_audio_with_librosa
+
+# Music generation
 from musicgen_service.musicgen_handler import generate_music
 
-# Persona system
+# ------------------------ PERSONA SYSTEM ------------------------
 from persona_service.persona_analyzer import analyze_persona_audio
 from persona_service.persona_cache import cache_persona, load_persona
 
-# Advanced features
+# Simple SoVITS
+from sovits_service.sovits_handler import run_sovits
+
+# Advanced multilayer SoVITS
+from sovits_service.sovits_multilayer import run_sovits_multilayer
+
+# ------------------------ ADVANCED FEATURES ------------------------
 from versioning_service.version_handler import save_version, get_versions
 from cover_art_service.cover_art_handler import generate_cover
 from lyrics_service.lyrics_handler import generate_lyrics
@@ -27,9 +34,11 @@ from melody_midi_service.melody_midi_handler import voice_to_midi
 from ghost_mode_service.ghost_mode_handler import apply_ghost_mode
 
 
+# ================================================================
+#                    FLASK APP SETUP
+# ================================================================
 app = Flask(__name__)
 
-# ------------------------ CORS FOR BASE44 ------------------------
 CORS(app, resources={
     r"/*": {
         "origins": [
@@ -43,14 +52,15 @@ CORS(app, resources={
     }
 })
 
-
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
         return "", 200
 
 
-# ------------------------ HEALTH ------------------------
+# ================================================================
+#                       HEALTH CHECK
+# ================================================================
 @app.get("/health")
 def health():
     return jsonify({
@@ -63,6 +73,7 @@ def health():
             "/melody/extract",
             "/chord/detect",
             "/sovits/sing",
+            "/sovits/sing-multi",
             "/dsp/analyze",
             "/gen/instrumental",
             "/gen/song",
@@ -85,62 +96,43 @@ def health():
 # ================================================================
 #                      CORE DSP ENDPOINTS
 # ================================================================
-
-# ------------------------ DEMUCS ------------------------
 @app.post("/demucs/separate")
 def demucs_route():
-    audio_url = request.json.get("audio_url")
-    return run_demucs(audio_url)
+    return run_demucs(request.json.get("audio_url"))
 
-
-# ------------------------ FFMPEG ------------------------
 @app.post("/ffmpeg/assemble")
 def ffmpeg_route():
-    tracks = request.json.get("tracks")
-    return run_ffmpeg_mix(tracks)
+    return run_ffmpeg_mix(request.json.get("tracks"))
 
-
-# ------------------------ MASTERING ------------------------
 @app.post("/mastering/loudness")
 def mastering_route():
-    audio_url = request.json.get("audio_url")
-    return run_mastering(audio_url)
+    return run_mastering(request.json.get("audio_url"))
 
-
-# ------------------------ MELODY ------------------------
 @app.post("/melody/extract")
 def melody_route():
-    audio_url = request.json.get("audio_url")
-    return extract_melody(audio_url)
+    return extract_melody(request.json.get("audio_url"))
 
-
-# ------------------------ CHORDS ------------------------
 @app.post("/chord/detect")
 def chord_route():
-    audio_url = request.json.get("audio_url")
-    return detect_chords(audio_url)
+    return detect_chords(request.json.get("audio_url"))
 
-
-# ================================================================
-#                   UNIVERSAL DSP (LIBROSA)
-# ================================================================
 @app.post("/dsp/analyze")
 def dsp_route():
-    audio_bytes = request.data
-    return analyze_audio_with_librosa(audio_bytes)
+    return analyze_audio_with_librosa(request.data)
 
 
 # ================================================================
-#               MUSIC GENERATION (MUSICGEN)
+#                MUSIC GENERATION (MUSICGEN)
 # ================================================================
 @app.post("/gen/instrumental")
 def gen_instrumental():
     data = request.json
-    prompt = data.get("prompt")
-    duration = data.get("duration", 32)
-    bpm = data.get("bpm", None)
-    seed = data.get("seed", None)
-    result = generate_music(prompt, duration, bpm, seed)
+    result = generate_music(
+        data.get("prompt"),
+        data.get("duration", 32),
+        data.get("bpm", None),
+        data.get("seed", None)
+    )
     return jsonify(result)
 
 
@@ -157,8 +149,7 @@ def gen_song():
         "guitars, drums, ambience, cohesive structure"
     )
 
-    result = generate_music(prompt, duration, bpm)
-    return jsonify(result)
+    return jsonify(generate_music(prompt, duration, bpm))
 
 
 # ================================================================
@@ -166,119 +157,100 @@ def gen_song():
 # ================================================================
 @app.post("/persona/analyze")
 def analyze_persona_route():
-    audio_bytes = request.data
-    result = analyze_persona_audio(audio_bytes)
-    return jsonify(result)
-
+    return jsonify(analyze_persona_audio(request.data))
 
 @app.post("/persona/cache")
 def cache_persona_route():
-    payload = request.json
-    persona_id = payload["persona_id"]
-    persona_data = payload["persona_data"]
-    return jsonify(cache_persona(persona_id, persona_data))
-
-@app.post("/persona/preview")
-def preview_persona_route():
-    payload = request.json
-    persona_id = payload["persona_id"]
-    text = payload["text"]
-
-    audio_data = preview_voice(persona_id, text)
-
-    return app.response_class(
-        response=audio_data,
-        mimetype="audio/wav",
-        status=200
-    )
-
+    body = request.json
+    return jsonify(cache_persona(body["persona_id"], body["persona_data"]))
 
 
 # ================================================================
-#                     SOVITS — PERSONA SINGING
+#                SIMPLE SOVITS (Legacy Endpoint)
 # ================================================================
 @app.post("/sovits/sing")
-def sovits_route():
+def sovits_simple_route():
     lyrics = request.json.get("lyrics")
-    melody_midi = request.json.get("melody_midi")
+    midi_b64 = request.json.get("melody_midi")
     persona_id = request.json.get("persona_id")
 
     persona = load_persona(persona_id)
+    midi_bytes = midi_b64.encode("latin1") if midi_b64 else b""
 
-    return run_sovits(lyrics, melody_midi, persona)
+    result = run_sovits(lyrics, midi_bytes, persona)
+    return send_file(result["wav_path"], mimetype="audio/wav")
 
 
 # ================================================================
-#                    ADVANCED FEATURES
+#           ADVANCED MULTILAYER SOVITS (NEW ENDPOINT)
 # ================================================================
+@app.post("/sovits/sing-multi")
+def sovits_multilayer_route():
+    body = request.json
 
-# -------- SONG VERSIONING --------
+    lyrics = body["lyrics"]
+    midi_b64 = body["melody_midi_base64"]
+    persona_id = body["persona_id"]
+    layers = body["layers"]  # dict {mode: weight}
+
+    persona = load_persona(persona_id)
+    midi_bytes = midi_b64.encode("latin1")
+
+    audio_bytes = run_sovits_multilayer(lyrics, midi_bytes, persona, layers)
+
+    tmp = f"/tmp/multi_out_{uuid.uuid4()}.wav"
+    with open(tmp, "wb") as f:
+        f.write(audio_bytes)
+
+    return send_file(tmp, mimetype="audio/wav")
+
+
+# ================================================================
+#                     ADVANCED DSP FEATURES
+# ================================================================
 @app.post("/versions/save")
 def save_version_route():
-    song_id = request.json["song_id"]
-    audio_url = request.json["audio_url"]
-    return jsonify(save_version(song_id, audio_url))
-
+    return jsonify(save_version(request.json["song_id"], request.json["audio_url"]))
 
 @app.get("/versions/list")
 def list_versions_route():
-    song_id = request.args.get("song_id")
-    return jsonify(get_versions(song_id))
+    return jsonify(get_versions(request.args.get("song_id")))
 
-
-# -------- COVER ART GENERATOR --------
 @app.post("/cover/generate")
 def cover_route():
-    prompt = request.json["prompt"]
-    return jsonify(generate_cover(prompt))
+    return jsonify(generate_cover(request.json["prompt"]))
 
-
-# -------- LYRICS GENERATOR --------
 @app.post("/lyrics/generate")
 def lyrics_route():
-    req = request.json
-    return jsonify(generate_lyrics(req["style"], req["emotion"]))
+    return jsonify(generate_lyrics(request.json["style"], request.json["emotion"]))
 
-
-# -------- VOCAL DOUBLER --------
 @app.post("/vocal/doubler")
 def doubler_route():
     return vocal_doubler(request.data)
 
-
-# -------- ANALOG MASTER --------
 @app.post("/master/analog")
 def analog_route():
     return analog_master(request.data)
 
-
-# -------- AUTOMIX --------
 @app.post("/automix")
 def automix_route():
-    stems = request.json["stems"]
-    return auto_mix(stems)
+    return auto_mix(request.json["stems"])
 
-
-# -------- SONGWRITING --------
 @app.post("/songwriting")
 def songwriting_route():
     return jsonify(songwriting_helper(request.json["style"]))
 
-
-# -------- MELODY TO MIDI --------
 @app.post("/melody/midi")
 def midi_route():
     return voice_to_midi(request.data)
 
-
-# -------- GHOST MODE 2.0 --------
 @app.post("/vocal/ghost2")
 def ghost2_route():
     return apply_ghost_mode(request.data)
 
 
 # ================================================================
-#                       ENTRYPOINT
+#                           ENTRYPOINT
 # ================================================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

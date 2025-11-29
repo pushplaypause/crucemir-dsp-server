@@ -1,27 +1,20 @@
-# persona_service/persona_cache.py
-
 import os
 import json
 
-CACHE_DIR = "/app/cache/personas"
-
-os.makedirs(CACHE_DIR, exist_ok=True)
+PERSONA_DIR = "personas"
 
 def cache_persona(persona_id, persona_data):
-    try:
-        path = os.path.join(CACHE_DIR, f"{persona_id}.json")
-        with open(path, "w") as f:
-            json.dump(persona_data, f)
-        return {"cached": True, "persona_id": persona_id}
-    except Exception as e:
-        return {"error": str(e)}
+    folder = f"{PERSONA_DIR}/{persona_id}"
+    os.makedirs(folder, exist_ok=True)
+
+    json.dump(persona_data, open(f"{folder}/persona.json", "w"))
+
+    return {"status": "cached", "persona_id": persona_id}
+
 
 def load_persona(persona_id):
-    try:
-        path = os.path.join(CACHE_DIR, f"{persona_id}.json")
-        if not os.path.exists(path):
-            return None
-        with open(path, "r") as f:
-            return json.load(f)
-    except:
-        return None
+    path = f"{PERSONA_DIR}/{persona_id}/persona.json"
+    if not os.path.exists(path):
+        raise Exception("Persona not found")
+
+    return json.load(open(path))

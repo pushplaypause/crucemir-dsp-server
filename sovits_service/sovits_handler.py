@@ -1,22 +1,18 @@
-import os
-import json
 import uuid
-import base64
+import json
 import subprocess
 import tempfile
+import os
 import soundfile as sf
 
+# -----------------------------------------------------
+# ADVANCED SOVITS SINGING ENGINE
+# -----------------------------------------------------
 
-PERSONA_DIR = "/app/personas"
-
-
-# ---------------------------------------------------------
-# EXTRACT SOVITS FEATURES
-# ---------------------------------------------------------
 def extract_sovits_features(audio_path: str):
     """
-    Extract SoVITS conditioning features (F0, timbre, spectral).
-    Calls SoVITS CLI extractor.
+    Extract conditioning embeddings for SoVITS.
+    Uses the SoVITS CLI extractor.
     """
 
     tmp_json = f"/tmp/sovits_features_{uuid.uuid4()}.json"
@@ -30,107 +26,57 @@ def extract_sovits_features(audio_path: str):
 
     subprocess.run(cmd, check=True)
 
-    return json.load(open(tmp_json))
+    return tmp_json
 
 
-# ---------------------------------------------------------
-# RUN SOVITS SINGING WITH PERSONA + MIDI + VOCAL MODE
-# ---------------------------------------------------------
-def run_sovits(lyrics: str, midi_data: str, persona: dict, vocal_mode="neutral"):
+def run_sovits_singing(lyrics: str, midi_data: bytes, persona: dict, vocal_mode="neutral"):
     """
-    Main SoVITS singing pipeline.
-
-    Inputs:
-        - lyrics: text
-        - midi_data: Base64 string
-        - persona: dict from persona_cache
-        - vocal_mode: whisper/ghost/aggressive/neutral
-
-    Output:
-        - raw WAV bytes
+    Run SoVITS singing:
+    - lyrics.txt
+    - melody.mid (raw bytes)
+    - persona features.json
+    - vocal mode (0–3)
     """
 
-    # Temp files
-    tmp_txt = f"/tmp/lyrics_{uuid.uuid4()}.txt"
-    tmp_midi = f"/tmp/melody_{uuid.uuid4()}.mid"
+    # Temp paths
+    tmp_lyrics = f"/tmp/lyrics_{uuid.uuid4()}.txt"
+    tmp_midi = f"/tmp/midi_{uuid.uuid4()}.mid"
     output_wav = f"/tmp/sovits_{uuid.uuid4()}.wav"
 
-    # -----------------------------
-    # Write lyrics
-    # -----------------------------
-    with open(tmp_txt, "w") as f:
+    # Save lyrics
+    with open(tmp_lyrics, "w") as f:
         f.write(lyrics)
 
-    # -----------------------------
-    # Decode Base64 MIDI
-    # -----------------------------
-    try:
-        midi_bytes = base64.b64decode(midi_data)
-    except Exception:
-        return {
-            "success": False,
-            "error": "MIDI data is not valid Base64."
-        }
-
+    # Save MIDI (raw bytes)
     with open(tmp_midi, "wb") as f:
-        f.write(midi_bytes)
+        f.write(midi_data)
 
-    # -----------------------------
-    # Get persona feature paths
-    # -----------------------------
-    try:
-        features_path = persona["paths"]["features"]
-        pt_path = persona["paths"]["pt"]
-    except:
-        return {
-            "success": False,
-            "error": "Persona object missing required feature paths."
-        }
+    # Resolve persona features path
+    features_path = persona["features_path"]
 
-    # -----------------------------
-    # Vocal Mode Mapping
-    # -----------------------------
+    # Vocal mode mapping
     mode_map = {
         "neutral": "0",
         "whisper": "1",
         "ghost": "2",
         "aggressive": "3"
     }
+
     mode_code = mode_map.get(vocal_mode, "0")
 
-    # -----------------------------
-    # Build SoVITS CLI command
-    # -----------------------------
+    # Build command
     cmd = [
         "sovits-cli",
         "sing",
-        "--lyrics", tmp_txt,
+        "--lyrics", tmp_lyrics,
         "--midi", tmp_midi,
         "--features", features_path,
-        "--voice-embed", pt_path,
         "--vocal-mode", mode_code,
         "--output", output_wav
     ]
 
-    try:
-        subprocess.run(cmd, check=True)
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"SoVITS failed: {str(e)}"
-        }
+    subprocess.run(cmd, check=True)
 
-    # -----------------------------
-    # Return audio bytes
-    # -----------------------------
-    try:
-        with open(output_wav, "rb") as f:
-            audio_bytes = f.read()
-
-        return audio_bytes
-
-    except Exception as e:
-        return {
-            "success": False,
-            "error": f"Failed to read output audio: {str(e)}"
-        }
+    # Return rendered WAV as bytes
+    audio_bytes, sr = sf.read(output_wav, dtype='float32')
+    return audio_bytes.tobytes()
