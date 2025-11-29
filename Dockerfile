@@ -34,6 +34,7 @@ RUN pip install --upgrade pip setuptools wheel --no-cache-dir
 # C) Create pip wheel cache
 # ---------------------------------------------------------
 RUN mkdir -p /pipcache
+RUN pip cache purge || true
 
 # ---------------------------------------------------------
 # D) Install Python dependencies
@@ -44,7 +45,7 @@ ENV CFLAGS="-O3"
 ENV BLAS=OpenBLAS
 ENV LAPACK=OpenBLAS
 
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --no-binary :all: -r /tmp/requirements.txt
     --find-links=/pipcache \
     --cache-dir=/pipcache \
     -r /tmp/requirements.txt
