@@ -23,6 +23,8 @@ from timestretch_service.timestretch_handler import time_stretch
 from ffmpeg_service.zip_stems_hq import create_hq_zip_stems
 from ffmpeg_service.ffmpeg_handler import create_zip_from_stems
 from chorus_service.chorus_detector import detect_chorus_sections
+from analysis_service.song_analyzer import analyze_song
+from alignment_service.lyric_alignment import align_lyrics_to_melody
 
 # ============================================================
 # HQ ENGINES
@@ -107,6 +109,24 @@ def generate_temp_file(raw, ext=".wav"):
     url = f"{request.url_root.rstrip('/')}/files/{name}"
     return path, url
 
+# ============================================================
+# ALIGN LYRICS
+# ============================================================
+
+@app.post("/lyrics/align")
+def lyric_align_route():
+    try:
+        data = safe_json()
+        lyrics = data["lyrics"]
+        bpm = data["bpm"]
+        melody_length = data["melody_length"]
+
+        alignment = align_lyrics_to_melody(lyrics, bpm, melody_length)
+        return jsonify({"alignment": alignment})
+
+    except Exception as e:
+        return error_response(e)
+
 
 # ============================================================
 # HEALTH
@@ -150,6 +170,25 @@ def gen_song_hq():
         )
         _, url = generate_temp_file(audio)
         return jsonify({"audio_url": url})
+    except Exception as e:
+        return error_response(e)
+
+# ============================================================
+# API Endpoint
+# ============================================================
+
+@app.post("/audio/analyze")
+def song_analyze_route():
+    try:
+        url = safe_json()["audio_url"]
+
+        import tempfile, requests
+        tmp = tempfile.mktemp(suffix=".wav")
+        with open(tmp, "wb") as f:
+            f.write(requests.get(url).content)
+
+        result = analyze_song(tmp)
+        return jsonify(result)
     except Exception as e:
         return error_response(e)
 
