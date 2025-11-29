@@ -6,6 +6,8 @@ import numpy as np
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
+
+
 # ============================================================
 # CORE DSP SERVICES
 # ============================================================
@@ -20,6 +22,7 @@ from pitch_service.pitch_handler import pitch_shift
 from timestretch_service.timestretch_handler import time_stretch
 from ffmpeg_service.zip_stems_hq import create_hq_zip_stems
 from ffmpeg_service.ffmpeg_handler import create_zip_from_stems
+from chorus_service.chorus_detector import detect_chorus_sections
 
 # ============================================================
 # HQ ENGINES
@@ -112,6 +115,25 @@ def generate_temp_file(raw, ext=".wav"):
 def health():
     return jsonify({"status": "ok"})
 
+# ============================================================
+# MODERN CHORUS DETECTION
+# ============================================================
+
+@app.post("/audio/chorus")
+def chorus_route():
+    try:
+        url = safe_json()["audio_url"]
+
+        # Download to temp file
+        import requests, tempfile
+        tmp = tempfile.mktemp(suffix=".wav")
+        with open(tmp, "wb") as f:
+            f.write(requests.get(url).content)
+
+        result = detect_chorus_sections(tmp)
+        return jsonify(result)
+    except Exception as e:
+        return error_response(e)
 
 # ============================================================
 # SONG HQ — MusicGen 3-pass engine
