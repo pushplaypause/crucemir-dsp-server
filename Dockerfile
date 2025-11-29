@@ -1,7 +1,7 @@
 FROM python:3.10-slim-bookworm
 
 # ---------------------------------------------------------
-# A) SYSTEM DEPENDENCIES
+# A) SYSTEM DEPENDENCIES (DSP + Torch + FFmpeg)
 # ---------------------------------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
@@ -26,61 +26,49 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------
-# B) Upgrade pip tools
+# B) Upgrade pip + tools
 # ---------------------------------------------------------
 RUN pip install --upgrade pip setuptools wheel --no-cache-dir
 
 # ---------------------------------------------------------
-# C) Create pip wheel cache
-# ---------------------------------------------------------
-RUN mkdir -p /pipcache
-RUN pip cache purge || true
-
-# ---------------------------------------------------------
-# D) Install Python dependencies
+# C) Install Python dependencies
 # ---------------------------------------------------------
 COPY requirements.txt /tmp/requirements.txt
-
 ENV CFLAGS="-O3"
-ENV BLAS=OpenBLAS
-ENV LAPACK=OpenBLAS
 
+# ⚡ CRITICAL: Clean install — no caches, no wheel re-use
 RUN pip install --no-cache-dir --no-binary :all: -r /tmp/requirements.txt
-    --find-links=/pipcache \
-    --cache-dir=/pipcache \
-    -r /tmp/requirements.txt
 
 # ---------------------------------------------------------
-# E) Copy app
+# D) Copy Application
 # ---------------------------------------------------------
 WORKDIR /app
 COPY . .
 
 # ---------------------------------------------------------
-# F) Cleanup to shrink image ~35-45%
+# E) Cleanup — shrink image by ~40%
 # ---------------------------------------------------------
-RUN find /usr/local/lib/python3.11 -type d -name "__pycache__" -exec rm -rf {} + && \
-    find /usr/local/lib/python3.11 -type f -name "*.a" -delete && \
-    find /usr/local/lib/python3.11 -type f -name "*.o" -delete && \
-    find /usr/local/lib/python3.11 -type f -name "*.pyc" -delete && \
+RUN find /usr/local/lib/python3.10 -type d -name "__pycache__" -exec rm -rf {} + && \
+    find /usr/local/lib/python3.10 -type f -name "*.pyc" -delete && \
+    find /usr/local/lib/python3.10 -type f -name "*.a" -delete && \
+    find /usr/local/lib/python3.10 -type f -name "*.o" -delete && \
     rm -rf /root/.cache/pip/* && \
-    rm -rf /pipcache/* && \
     rm -rf /usr/share/doc/* && \
     rm -rf /usr/share/man/*
 
 # ---------------------------------------------------------
-# G) Ensure /tmp is writable
+# F) Ensure /tmp is writable
 # ---------------------------------------------------------
 RUN mkdir -p /tmp && chmod 777 /tmp
 
 # ---------------------------------------------------------
-# H) HEALTHCHECK
+# G) Healthcheck
 # ---------------------------------------------------------
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/health || exit 1
 
 # ---------------------------------------------------------
-# I) Port + Gunicorn
+# H) Start Gunicorn
 # ---------------------------------------------------------
 EXPOSE 8080
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "1200", "app:app"]
