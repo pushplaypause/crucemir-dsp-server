@@ -2,6 +2,10 @@ flask
 gunicorn
 ffmpeg-python
 pydub
+requests
+pyloudnorm
+scipy
+soundfile
 essentia==2.1b6.dev1389
 openvoice-cli
 ctranslate2
@@ -9,10 +13,7 @@ faster-whisper
 demucs==4.0.1
 crepe
 librosa==0.9.1
-soundfile
-pyloudnorm
 numpy
-scipy
 torch==2.2.2
 torchaudio==2.2.2
 openunmix
