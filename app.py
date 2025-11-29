@@ -11,6 +11,9 @@ from openvoice_service.openvoice_handler import run_openvoice
 from sovits_service.sovits_handler import run_sovits
 from librosa_service.librosa_handler import analyze_audio_with_librosa
 from musicgen_service.musicgen_handler import generate_music
+from persona_service.persona_analyzer import analyze_persona_audio
+from persona_service.persona_cache import cache_persona, load_persona
+from persona_service.persona_preview import preview_voice
 
 app = Flask(__name__)
 
@@ -120,6 +123,74 @@ def gen_instrumental():
 
     result = generate_music(prompt, duration, bpm, seed)
     return jsonify(result)
+
+# ---------------------------------
+# 🔥 Analyze voice audio for persona creation
+# ---------------------------------
+@app.post("/persona/analyze")
+def analyze_persona_route():
+    audio_bytes = request.data
+    result = analyze_persona_audio(audio_bytes)
+    return jsonify(result)
+
+# ---------------------------------
+# 🔥 Cache persona in Render
+# ---------------------------------
+@app.post("/persona/cache")
+def cache_persona_route():
+    payload = request.json
+    persona_id = payload["persona_id"]
+    persona_data = payload["persona_data"]
+    return jsonify(cache_persona(persona_id, persona_data))
+
+# ---------------------------------
+# 🔥 Preview persona voice
+# ---------------------------------
+@app.post("/persona/preview")
+def preview_persona_route():
+    payload = request.json
+    persona_id = payload["persona_id"]
+    text = payload["text"]
+
+    audio_data = preview_voice(persona_id, text)
+
+    return app.response_class(
+        response=audio_data,
+        mimetype="audio/wav",
+        status=200
+    )
+
+# ---------------------------------
+# 🔥 Update SoVITS singing endpoint for persona conditioning
+# ---------------------------------
+@app.post("/sovits/sing")
+def sovits_route():
+    lyrics = request.json.get("lyrics")
+    melody_midi = request.json.get("melody_midi")
+    persona_id = request.json.get("persona_id")
+
+    persona = load_persona(persona_id)
+
+    return run_sovits(lyrics, melody_midi, persona)
+
+
+# ---------------------------------
+# 🗣️ GENERATE FULL SONG SKELETON
+# ---------------------------------
+@app.post("/gen/song")
+def gen_song():
+    data = request.json
+
+    style = data.get("style", "cinematic metalcore")
+    emotion = data.get("emotion", "dark and emotional")
+    bpm = data.get("bpm", 120)
+    duration = data.get("duration", 32)
+
+    prompt = f"{style}, {emotion}, atmospheric, cinematic, metalcore, guitars, drums, ambience, cohesive composition"
+
+    result = generate_music(prompt, duration, bpm)
+    return jsonify(result)
+
 
 # ---------------------------------
 # 🎤 SOVITS — Vale Singing
