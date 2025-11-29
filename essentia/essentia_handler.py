@@ -1,13 +1,13 @@
-import essentia
-import essentia.streaming as es
+import librosa
 import numpy as np
 import tempfile
-import os
 import subprocess
+import os
 
 def run_essentia(audio_path):
-    # Convert audio to mono 44.1kHz WAV for Essentia compatibility
+    # Convert audio to mono 44.1kHz WAV for stable analysis
     tmp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+
     subprocess.run([
         "ffmpeg", "-y",
         "-i", audio_path,
@@ -16,26 +16,33 @@ def run_essentia(audio_path):
         tmp_wav
     ], check=True)
 
-    loader = es.MonoLoader(filename=tmp_wav)
-    rhythm = es.RhythmExtractor2013(method="multifeature")
-    key = es.KeyExtractor()
+    # Load audio
+    y, sr = librosa.load(tmp_wav, sr=44100)
 
-    pool = essentia.Pool()
+    # BPM (beat tracking)
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
 
-    loader.audio >> rhythm.audio
-    rhythm.bpm >> (lambda x: pool.add("bpm", x))
-    loader.audio >> key.audio
-    key.key >> (lambda x: pool.add("key", x))
-    key.scale >> (lambda x: pool.add("scale", x))
+    # Key estimation (simple chroma-based)
+    chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+    key_index = chroma.mean(axis=1).argmax()
 
-    essentia.run(loader)
+    KEYS = [
+        "C","C#","D","D#","E","F","F#","G","G#","A","A#","B"
+    ]
+    key = KEYS[key_index]
 
-    bpm = float(pool["bpm"][0])
-    key_val = pool["key"][0]
-    scale = pool["scale"][0]
+    # Scale detection (VERY rough — major/minor)
+    if "C#" in key or "F#" in key or "G#" in key:
+        scale = "minor"
+    else:
+        scale = "major"
+
+    # Energy estimation
+    energy = float(np.mean(y ** 2))
 
     return {
-        "bpm": bpm,
-        "key": key_val,
-        "scale": scale
+        "bpm": float(tempo),
+        "key": key,
+        "scale": scale,
+        "energy": energy
     }
