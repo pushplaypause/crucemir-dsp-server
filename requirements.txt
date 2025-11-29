@@ -1,0 +1,17 @@
+flask
+gunicorn
+requests
+soundfile
+numpy
+scipy
+pyloudnorm
+librosa
+demucs
+essentia
+crepe
+aubio
+pychorus
+torch
+torchaudio
+openvoice-cli
+ffmpeg-python
