@@ -7,18 +7,16 @@ from ffmpeg_service.ffmpeg_handler import run_ffmpeg_mix
 from mastering_service.mastering_handler import run_mastering
 from melody_service.melody_handler import extract_melody
 from chord_service.chord_handler import detect_chords
-from openvoice_service.openvoice_handler import run_openvoice
 from sovits_service.sovits_handler import run_sovits
 from librosa_service.librosa_handler import analyze_audio_with_librosa
 from musicgen_service.musicgen_handler import generate_music
 from persona_service.persona_analyzer import analyze_persona_audio
 from persona_service.persona_cache import cache_persona, load_persona
-from persona_service.persona_preview import preview_voice
 
 app = Flask(__name__)
 
 # ---------------------------------
-# 🔥 ENABLE CORS FOR BASE44 ACCESS
+# CORS for Base44
 # ---------------------------------
 CORS(app, resources={
     r"/*": {
@@ -33,16 +31,13 @@ CORS(app, resources={
     }
 })
 
-# ---------------------------------
-# 🔥 ALLOW OPTIONS PREFLIGHT REQUESTS
-# ---------------------------------
 @app.before_request
 def handle_preflight():
     if request.method == "OPTIONS":
         return "", 200
 
 # ---------------------------------
-# HEALTH CHECK ENDPOINT
+# Health
 # ---------------------------------
 @app.get("/health")
 def health():
@@ -55,14 +50,17 @@ def health():
             "/mastering/loudness",
             "/melody/extract",
             "/chord/detect",
-            "/openvoice/say",
             "/sovits/sing",
-            "/dsp/analyze"
+            "/dsp/analyze",
+            "/gen/instrumental",
+            "/gen/song",
+            "/persona/analyze",
+            "/persona/cache"
         ]
     })
 
 # ---------------------------------
-# 🎵 DEMUCS STEM SEPARATION
+# DEMUCS
 # ---------------------------------
 @app.post("/demucs/separate")
 def demucs_route():
@@ -70,7 +68,7 @@ def demucs_route():
     return run_demucs(audio_url)
 
 # ---------------------------------
-# 🎛️ FFMPEG MIXING & STEM ASSEMBLY
+# FFMPEG
 # ---------------------------------
 @app.post("/ffmpeg/assemble")
 def ffmpeg_route():
@@ -78,7 +76,7 @@ def ffmpeg_route():
     return run_ffmpeg_mix(tracks)
 
 # ---------------------------------
-# 🔊 MASTERING (LOUDNESS)
+# MASTERING
 # ---------------------------------
 @app.post("/mastering/loudness")
 def mastering_route():
@@ -86,7 +84,7 @@ def mastering_route():
     return run_mastering(audio_url)
 
 # ---------------------------------
-# 🎼 MELODY EXTRACTION
+# MELODY
 # ---------------------------------
 @app.post("/melody/extract")
 def melody_route():
@@ -94,7 +92,7 @@ def melody_route():
     return extract_melody(audio_url)
 
 # ---------------------------------
-# 🎸 CHORD DETECTION
+# CHORDS
 # ---------------------------------
 @app.post("/chord/detect")
 def chord_route():
@@ -102,30 +100,20 @@ def chord_route():
     return detect_chords(audio_url)
 
 # ---------------------------------
-# 🗣️ OPENVOICE — Vale TTS
-# ---------------------------------
-@app.post("/openvoice/say")
-def openvoice_route():
-    text = request.json.get("text")
-    return run_openvoice(text)
-
-# ---------------------------------
-# 🗣️ GENERATE INSTRUMENTAL
+# MUSICGEN (Instrumentals)
 # ---------------------------------
 @app.post("/gen/instrumental")
 def gen_instrumental():
     data = request.json
-
     prompt = data.get("prompt")
     duration = data.get("duration", 32)
     bpm = data.get("bpm", None)
     seed = data.get("seed", None)
-
     result = generate_music(prompt, duration, bpm, seed)
     return jsonify(result)
 
 # ---------------------------------
-# 🔥 Analyze voice audio for persona creation
+# PERSONA ANALYSIS
 # ---------------------------------
 @app.post("/persona/analyze")
 def analyze_persona_route():
@@ -134,7 +122,7 @@ def analyze_persona_route():
     return jsonify(result)
 
 # ---------------------------------
-# 🔥 Cache persona in Render
+# PERSONA CACHE
 # ---------------------------------
 @app.post("/persona/cache")
 def cache_persona_route():
@@ -144,65 +132,32 @@ def cache_persona_route():
     return jsonify(cache_persona(persona_id, persona_data))
 
 # ---------------------------------
-# 🔥 Preview persona voice
-# ---------------------------------
-@app.post("/persona/preview")
-def preview_persona_route():
-    payload = request.json
-    persona_id = payload["persona_id"]
-    text = payload["text"]
-
-    audio_data = preview_voice(persona_id, text)
-
-    return app.response_class(
-        response=audio_data,
-        mimetype="audio/wav",
-        status=200
-    )
-
-# ---------------------------------
-# 🔥 Update SoVITS singing endpoint for persona conditioning
+# SOVITS SINGING WITH PERSONA
 # ---------------------------------
 @app.post("/sovits/sing")
 def sovits_route():
     lyrics = request.json.get("lyrics")
     melody_midi = request.json.get("melody_midi")
     persona_id = request.json.get("persona_id")
-
     persona = load_persona(persona_id)
-
     return run_sovits(lyrics, melody_midi, persona)
 
-
 # ---------------------------------
-# 🗣️ GENERATE FULL SONG SKELETON
+# SONG GENERATOR (MusicGen)
 # ---------------------------------
 @app.post("/gen/song")
 def gen_song():
     data = request.json
-
     style = data.get("style", "cinematic metalcore")
     emotion = data.get("emotion", "dark and emotional")
     bpm = data.get("bpm", 120)
     duration = data.get("duration", 32)
-
-    prompt = f"{style}, {emotion}, atmospheric, cinematic, metalcore, guitars, drums, ambience, cohesive composition"
-
+    prompt = f"{style}, {emotion}, cinematic, atmospheric, metalcore, guitars, drums"
     result = generate_music(prompt, duration, bpm)
     return jsonify(result)
 
-
 # ---------------------------------
-# 🎤 SOVITS — Vale Singing
-# ---------------------------------
-@app.post("/sovits/sing")
-def sovits_route():
-    lyrics = request.json.get("lyrics")
-    melody_midi = request.json.get("melody_midi")
-    return run_sovits(lyrics, melody_midi)
-
-# ---------------------------------
-# 🎚️ DSP ANALYSIS (Librosa)
+# DSP (Librosa)
 # ---------------------------------
 @app.post("/dsp/analyze")
 def dsp_route():
@@ -210,7 +165,7 @@ def dsp_route():
     return analyze_audio_with_librosa(audio_bytes)
 
 # ---------------------------------
-# ENTRYPOINT FOR GUNICORN
+# ENTRYPOINT
 # ---------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)

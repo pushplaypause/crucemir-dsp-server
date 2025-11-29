@@ -1,24 +1,33 @@
-# persona_service/persona_preview.py
+import subprocess
+import tempfile
+import os
+from flask import jsonify
 
-from openvoice_cli import TTS
-from persona_service.persona_cache import load_persona
+def preview_voice(text, voice_model="default"):
+    """
+    Uses OpenVoice CLI to generate a temporary preview voice file.
+    """
+    try:
+        tmp_dir = tempfile.mkdtemp()
+        out_path = os.path.join(tmp_dir, "preview.wav")
 
-def preview_voice(persona_id, text):
-    persona = load_persona(persona_id)
-    if not persona:
-        return {"error": "Persona not found"}
+        # OpenVoice CLI command
+        cmd = [
+            "openvoice",
+            "--text", text,
+            "--output", out_path,
+            "--voice", voice_model
+        ]
 
-    tts = TTS(
-        voice_preset=persona["base_voice_type"],
-        timbre=persona["timbre_vector"],
-        breathiness=persona["breathiness"],
-        grit=persona["grit"]
-    )
+        subprocess.run(cmd, check=True)
 
-    output_path = "/app/cache/previews/preview.wav"
-    tts.generate(text, output_path)
+        return jsonify({
+            "success": True,
+            "preview_url": out_path
+        })
 
-    with open(output_path, "rb") as f:
-        data = f.read()
-
-    return data
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
