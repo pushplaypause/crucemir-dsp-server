@@ -1,24 +1,54 @@
+##############################################
+# 🔥 CORE SERVER
+##############################################
 flask
+flask-cors
 gunicorn
-ffmpeg-python
-pydub
 requests
-pyloudnorm
+
+##############################################
+# 🔊 AUDIO / DSP PROCESSING
+##############################################
+numpy
 scipy
 soundfile
-openvoice-cli==0.0.5
-ctranslate2
-faster-whisper
-demucs==4.0.1
-crepe
+python-soundfile
 librosa==0.9.1
-numpy
+mido
+
+ffmpeg-python
+pydub
+
+##############################################
+# 🤖 MACHINE LEARNING (CPU-Optimized)
+##############################################
 torch==2.2.2
 torchaudio==2.2.2
+protobuf
+transformers
+accelerate
+sentencepiece
+
+##############################################
+# 🎵 MUSIC / VOICE MODELS
+##############################################
+demucs==4.0.1
+crepe
 openunmix
 julius
 pychorus
+
+faster-whisper
+ctranslate2
 whisper-timestamped
-wavmark
-flask-cors
-requests
+
+##############################################
+# 🗣️ SoVITS / OPENVOICE / PERSONA ENGINE
+##############################################
+openvoice-cli==0.0.5   # DO NOT import TTS — CLI ONLY
+
+##############################################
+# 🎨 IMAGE GENERATION (COVER ART)
+##############################################
+Pillow
+openai
