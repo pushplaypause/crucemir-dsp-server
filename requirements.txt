@@ -14,7 +14,7 @@ torch==2.3.0
 torchaudio==2.3.0
 faster-whisper==0.10.0
 ctranslate2==3.24.0
-whisper-timestamped==1.15.2
+whisper-timestamped==1.13.3
 demucs==4.0.1
 openunmix==1.2.1
 TTS==0.22.0
