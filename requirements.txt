@@ -16,7 +16,6 @@ faster-whisper==0.10.0
 ctranslate2==3.24.0
 whisper-timestamped==1.15.2
 demucs==4.0.1
-julius==0.2.7
 openunmix==1.2.1
 TTS==0.22.0
 Pillow==10.3.0
