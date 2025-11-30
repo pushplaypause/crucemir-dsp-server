@@ -1,42 +1,31 @@
-# Flask
 flask==3.0.2
 flask-cors==4.0.0
 gunicorn==23.0.0
 requests==2.32.2
 
-# Core DSP
 numpy==1.26.4
 scipy==1.11.4
 soundfile==0.12.1
-pydub==0.25.1
 pyloudnorm==0.1.0
+pydub==0.25.1
 
-# Librosa Stack (working with SoVITS)
 librosa==0.9.1
 numba==0.58.1
 resampy==0.4.3
 
-# Torch (CPU, stable)
-torch==2.2.2
-torchaudio==2.2.2
+torch==2.3.0
+torchaudio==2.3.0
 
-# Whisper (working versions)
 faster-whisper==0.10.0
 ctranslate2==3.24.0
 whisper-timestamped==1.15.2
 
-# Music DSP
 demucs==4.0.1
 openunmix==1.2.1
 
-# TTS (SoVITS dependencies)
-TTS==0.22.0
-
-# Cover Art / AI
 Pillow==10.3.0
 openai==1.52.0
 
-# Misc ML
 protobuf==4.25.3
 sentencepiece==0.2.0
 accelerate==0.28.0
