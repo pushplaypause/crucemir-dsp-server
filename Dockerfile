@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     zlib1g-dev \
     pkg-config \
     wget \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------
@@ -43,10 +44,9 @@ WORKDIR /app
 COPY . .
 
 # ---------------------------------------------------------
-# E) Cleanup to shrink image ~35-45%
+# E) Cleanup
 # ---------------------------------------------------------
-RUN find /usr/local/lib/python3.10 -type d -name "__pycache__" -exec rm -rf {} + && \
-    rm -rf /root/.cache/pip/* && \
+RUN rm -rf /root/.cache/pip/* && \
     rm -rf /usr/share/doc/* && \
     rm -rf /usr/share/man/*
 
@@ -56,13 +56,13 @@ RUN find /usr/local/lib/python3.10 -type d -name "__pycache__" -exec rm -rf {} +
 RUN mkdir -p /tmp && chmod 777 /tmp
 
 # ---------------------------------------------------------
-# G) HEALTHCHECK
+# G) Healthcheck
 # ---------------------------------------------------------
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=25s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -fs http://localhost:8080/health || exit 1
 
 # ---------------------------------------------------------
-# H) Gunicorn
+# H) Run
 # ---------------------------------------------------------
 EXPOSE 8080
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--timeout", "1200", "app:app"]
