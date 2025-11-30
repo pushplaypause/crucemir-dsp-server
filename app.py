@@ -1,18 +1,18 @@
 import os
 import uuid
 import traceback
+import tempfile
+import librosa
 import base64
 import numpy as np
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 
-
-
 # ============================================================
 # CORE DSP SERVICES
 # ============================================================
 from demucs_service.demucs_handler import run_demucs
-from ffmpeg_service.ffmpeg_handler import run_ffmpeg_mix
+from ffmpeg_service.ffmpeg_handler import run_ffmpeg_mix, create_zip_from_stems
 from mastering_service.mastering_handler import run_mastering
 from master_ai_service.master_ai_handler import run_master_ai
 from melody_service.melody_handler import extract_melody
@@ -21,7 +21,6 @@ from librosa_service.librosa_handler import analyze_audio_with_librosa
 from pitch_service.pitch_handler import pitch_shift
 from timestretch_service.timestretch_handler import time_stretch
 from ffmpeg_service.zip_stems_hq import create_hq_zip_stems
-from ffmpeg_service.ffmpeg_handler import create_zip_from_stems
 from chorus_service.chorus_detector import detect_chorus_sections
 from analysis_service.song_analyzer import analyze_song
 from alignment_service.lyric_alignment import align_lyrics_to_melody
@@ -53,6 +52,17 @@ from melody_midi_service.melody_midi_handler import voice_to_midi
 from cover_art_service.cover_art_handler import generate_cover
 from versioning_service.version_handler import save_version, get_versions
 
+# ============================================================
+# MODERN DSP UTILITIES
+# ============================================================
+from dsp_service.dsp_utils import (
+    detect_onsets,
+    estimate_tempo,
+    compute_energy_map,
+    detect_silence,
+    slice_by_onsets,
+    detect_transients,
+)
 
 # ============================================================
 # FLASK APP + PUBLIC FILE HANDLER
@@ -65,7 +75,6 @@ def serve_files(filename):
     if not os.path.isfile(full):
         return jsonify({"error": "File not found"}), 404
     return send_file(full)
-
 
 # ============================================================
 # CORS
@@ -88,7 +97,6 @@ def handle_preflight():
     if request.method == "OPTIONS":
         return "", 200
 
-
 # ============================================================
 # UTILS
 # ============================================================
@@ -109,24 +117,87 @@ def generate_temp_file(raw, ext=".wav"):
     url = f"{request.url_root.rstrip('/')}/files/{name}"
     return path, url
 
+def save_temp(audio_bytes):
+    """Write raw bytes to a temp WAV file"""
+    path = tempfile.mktemp(suffix=".wav")
+    with open(path, "wb") as f:
+        f.write(audio_bytes)
+    return path
+
+def load_audio_from_bytes(raw):
+    path = save_temp(raw)
+    audio, sr = librosa.load(path, sr=44100)
+    return audio, sr
+
+# ============================================================
+# DSP – MODERN HIGH ACCURACY ENGINE
+# ============================================================
+@app.post("/dsp/onsets")
+def dsp_onsets_route():
+    try:
+        audio, sr = load_audio_from_bytes(request.data)
+        return jsonify({"onsets": detect_onsets(audio, sr)})
+    except Exception as e:
+        return error_response(e)
+
+@app.post("/dsp/tempo")
+def dsp_tempo_route():
+    try:
+        audio, sr = load_audio_from_bytes(request.data)
+        tempo, beats = estimate_tempo(audio, sr)
+        return jsonify({"tempo": tempo, "beats": beats})
+    except Exception as e:
+        return error_response(e)
+
+@app.post("/dsp/energy")
+def dsp_energy_route():
+    try:
+        audio, sr = load_audio_from_bytes(request.data)
+        return jsonify({"energy_map": compute_energy_map(audio, sr)})
+    except Exception as e:
+        return error_response(e)
+
+@app.post("/dsp/silence")
+def dsp_silence_route():
+    try:
+        audio, sr = load_audio_from_bytes(request.data)
+        return jsonify({"silence": detect_silence(audio, sr)})
+    except Exception as e:
+        return error_response(e)
+
+@app.post("/dsp/slice")
+def dsp_slice_route():
+    try:
+        audio, sr = load_audio_from_bytes(request.data)
+        slices = slice_by_onsets(audio, sr)
+        return jsonify({"slices": slices})
+    except Exception as e:
+        return error_response(e)
+
+@app.post("/dsp/transients")
+def dsp_transients_route():
+    try:
+        audio, sr = load_audio_from_bytes(request.data)
+        return jsonify({"transients": detect_transients(audio, sr)})
+    except Exception as e:
+        return error_response(e)
+
 # ============================================================
 # ALIGN LYRICS
 # ============================================================
-
 @app.post("/lyrics/align")
 def lyric_align_route():
     try:
         data = safe_json()
-        lyrics = data["lyrics"]
-        bpm = data["bpm"]
-        melody_length = data["melody_length"]
-
-        alignment = align_lyrics_to_melody(lyrics, bpm, melody_length)
-        return jsonify({"alignment": alignment})
-
+        return jsonify({
+            "alignment": align_lyrics_to_melody(
+                data["lyrics"],
+                data["bpm"],
+                data["melody_length"]
+            )
+        })
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # HEALTH
@@ -138,25 +209,20 @@ def health():
 # ============================================================
 # MODERN CHORUS DETECTION
 # ============================================================
-
 @app.post("/audio/chorus")
 def chorus_route():
     try:
         url = safe_json()["audio_url"]
-
-        # Download to temp file
-        import requests, tempfile
+        import requests
         tmp = tempfile.mktemp(suffix=".wav")
         with open(tmp, "wb") as f:
             f.write(requests.get(url).content)
-
-        result = detect_chorus_sections(tmp)
-        return jsonify(result)
+        return jsonify(detect_chorus_sections(tmp))
     except Exception as e:
         return error_response(e)
 
 # ============================================================
-# SONG HQ — MusicGen 3-pass engine
+# SONG HQ — MusicGen 3-pass
 # ============================================================
 @app.post("/gen/song-hq")
 def gen_song_hq():
@@ -174,27 +240,20 @@ def gen_song_hq():
         return error_response(e)
 
 # ============================================================
-# API Endpoint
+# FULL SONG ANALYZER
 # ============================================================
-
 @app.post("/audio/analyze")
 def song_analyze_route():
     try:
         url = safe_json()["audio_url"]
-
-        import tempfile, requests
-        tmp = tempfile.mktemp(suffix=".wav")
-        with open(tmp, "wb") as f:
-            f.write(requests.get(url).content)
-
-        result = analyze_song(tmp)
-        return jsonify(result)
+        import requests
+        tmp = save_temp(requests.get(url).content)
+        return jsonify(analyze_song(tmp))
     except Exception as e:
         return error_response(e)
 
-
 # ============================================================
-# ZIP STEMS — UNIFIED ENDPOINT (Option C)
+# ZIP STEMS — UNIFIED ENDPOINT
 # ============================================================
 @app.post("/ffmpeg/zipstems")
 def zipstems_route():
@@ -202,34 +261,25 @@ def zipstems_route():
         data = safe_json()
         stems = data["stems"]
         use_hq = request.args.get("hq") == "true"
-
-        if use_hq:
-            zip_bytes = create_hq_zip_stems(stems)
-        else:
-            zip_bytes = create_zip_from_stems(stems)
-
+        zip_bytes = create_hq_zip_stems(stems) if use_hq else create_zip_from_stems(stems)
         _, zip_url = generate_temp_file(zip_bytes, ext=".zip")
         return jsonify({"zip_url": zip_url})
-
     except Exception as e:
         return error_response(e)
 
-
 # ============================================================
-# DEMUCS
+# STEM SEPARATION
 # ============================================================
 @app.post("/demucs/separate")
 def demucs_route():
     try:
         url = safe_json()["audio_url"]
-        stems = run_demucs(url)
-        return jsonify({"stems": stems})
+        return jsonify({"stems": run_demucs(url)})
     except Exception as e:
         return error_response(e)
 
-
 # ============================================================
-# SOVITS — simple
+# SOVITS SIMPLE
 # ============================================================
 @app.post("/sovits/sing")
 def sovits_sing():
@@ -238,13 +288,10 @@ def sovits_sing():
         persona = load_persona(data["persona_id"])
         midi = base64.b64decode(data["melody_midi"]) if data.get("melody_midi") else b""
         result = run_sovits(data["lyrics"], midi, persona)
-
-        wav_path = result["wav_path"]
-        url = f"{request.url_root.rstrip('/')}/files/{os.path.basename(wav_path)}"
-        return jsonify({"audio_url": url})
+        wav = os.path.basename(result["wav_path"])
+        return jsonify({"audio_url": f"{request.url_root.rstrip('/')}/files/{wav}"})
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # SOVITS MULTI-LAYER
@@ -255,14 +302,11 @@ def sovits_multi():
         data = safe_json()
         persona = load_persona(data["persona_id"])
         midi = base64.b64decode(data["melody_midi"])
-        layers = data["layers"]
-
-        audio_bytes = run_sovits_multilayer(data["lyrics"], midi, persona, layers)
-        _, url = generate_temp_file(audio_bytes)
+        audio = run_sovits_multilayer(data["lyrics"], midi, persona, data["layers"])
+        _, url = generate_temp_file(audio)
         return jsonify({"audio_url": url})
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # SOVITS MULTI-PASS HQ
@@ -279,7 +323,6 @@ def sovits_sing_hq():
     except Exception as e:
         return error_response(e)
 
-
 # ============================================================
 # VOCAL EFFECTS
 # ============================================================
@@ -294,7 +337,6 @@ def ghost2_route():
     except Exception as e:
         return error_response(e)
 
-
 @app.post("/vocal/doubler")
 def doubler_route():
     try:
@@ -305,7 +347,6 @@ def doubler_route():
     except Exception as e:
         return error_response(e)
 
-
 # ============================================================
 # MUSICGEN SIMPLE
 # ============================================================
@@ -313,16 +354,14 @@ def doubler_route():
 def gen_instrumental():
     try:
         data = safe_json()
-        res = generate_music(
+        return jsonify(generate_music(
             data["prompt"],
             data.get("duration", 32),
             data.get("bpm"),
             data.get("seed")
-        )
-        return jsonify(res)
+        ))
     except Exception as e:
         return error_response(e)
-
 
 @app.post("/gen/song")
 def gen_song():
@@ -332,11 +371,9 @@ def gen_song():
             f'{data["style"]}, {data["emotion"]}, cinematic, metalcore, '
             'guitars, ambience, emotional structure'
         )
-        res = generate_music(prompt, data.get("duration", 32), data.get("bpm", 120))
-        return jsonify(res)
+        return jsonify(generate_music(prompt, data.get("duration", 32), data.get("bpm", 120)))
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # MASTERING
@@ -351,7 +388,6 @@ def analog_master_route():
     except Exception as e:
         return error_response(e)
 
-
 @app.post("/master/ai")
 def master_ai_route():
     try:
@@ -362,7 +398,6 @@ def master_ai_route():
     except Exception as e:
         return error_response(e)
 
-
 @app.post("/master/instrumental")
 def instrumental_master_route():
     try:
@@ -372,7 +407,6 @@ def instrumental_master_route():
         return jsonify({"audio_url": out})
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # AUDIO PROCESSORS
@@ -387,7 +421,6 @@ def audio_pitch_route():
     except Exception as e:
         return error_response(e)
 
-
 @app.post("/audio/timestretch")
 def audio_timestretch_route():
     try:
@@ -398,7 +431,6 @@ def audio_timestretch_route():
     except Exception as e:
         return error_response(e)
 
-
 # ============================================================
 # MELODY / MIDI
 # ============================================================
@@ -406,11 +438,9 @@ def audio_timestretch_route():
 def melody_midi_route():
     try:
         url = safe_json()["audio_url"]
-        midi_url = voice_to_midi(url)
-        return jsonify({"midi_url": midi_url})
+        return jsonify({"midi_url": voice_to_midi(url)})
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # PERSONA ENGINE
@@ -418,11 +448,9 @@ def melody_midi_route():
 @app.post("/persona/analyze")
 def persona_analyze_route():
     try:
-        features = analyze_persona_hq(request.data)
-        return jsonify(features)
+        return jsonify(analyze_persona_hq(request.data))
     except Exception as e:
         return error_response(e)
-
 
 @app.post("/persona/cache")
 def persona_cache_route():
@@ -432,16 +460,13 @@ def persona_cache_route():
     except Exception as e:
         return error_response(e)
 
-
 @app.post("/persona/preset")
 def persona_preset_route():
     try:
         data = safe_json()
-        preset = build_vocal_chain_preset(data["persona"])
-        return jsonify(preset)
+        return jsonify(build_vocal_chain_preset(data["persona"]))
     except Exception as e:
         return error_response(e)
-
 
 @app.post("/persona/preview")
 def persona_preview_route():
@@ -449,17 +474,17 @@ def persona_preview_route():
         data = safe_json()
         persona = load_persona(data["persona_id"])
         text = data["text"]
+
         sr = 16000
         duration = max(1.0, len(text) * 0.11)
         t = np.linspace(0, duration, int(sr * duration))
         melody = (0.5 * np.sin(2 * np.pi * 174.6 * t)).astype(np.float32)
+
         result = run_sovits(text, melody.tobytes(), persona)
-        wav = result["wav_path"]
-        out = f"{request.url_root.rstrip('/')}/files/{os.path.basename(wav)}"
-        return jsonify({"audio_url": out})
+        wav = os.path.basename(result["wav_path"])
+        return jsonify({"audio_url": f"{request.url_root.rstrip('/')}/files/{wav}"})
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # LYRICS + SONGWRITING
@@ -467,25 +492,23 @@ def persona_preview_route():
 @app.post("/lyrics/analyze")
 def lyrics_analyze_route():
     try:
-        text = safe_json()["text"]
-        return jsonify(analyze_lyrics_hq(text))
+        return jsonify(analyze_lyrics_hq(safe_json()["text"]))
     except Exception as e:
         return error_response(e)
-
 
 @app.post("/songwriting/hq")
 def songwriting_hq_route():
     try:
         data = safe_json()
-        persona = data["persona"]
-        mood = data["mood"]
-        bpm = data.get("bpm", 120)
-        style = data.get("style", "cinematic metalcore")
-        result = songwriting_hq(persona, mood, bpm, style)
+        result = songwriting_hq(
+            data["persona"],
+            data["mood"],
+            data.get("bpm", 120),
+            data.get("style", "cinematic metalcore")
+        )
         return jsonify(result)
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # COVER ART
@@ -493,11 +516,9 @@ def songwriting_hq_route():
 @app.post("/cover/generate")
 def cover_route():
     try:
-        data = safe_json()
-        return jsonify(generate_cover(data["prompt"]))
+        return jsonify(generate_cover(safe_json()["prompt"]))
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # VERSIONS
@@ -510,14 +531,12 @@ def save_version_route():
     except Exception as e:
         return error_response(e)
 
-
 @app.get("/versions/list")
 def list_versions_route():
     try:
         return jsonify(get_versions(request.args.get("song_id")))
     except Exception as e:
         return error_response(e)
-
 
 # ============================================================
 # ENTRYPOINT
