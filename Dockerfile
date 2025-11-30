@@ -37,7 +37,7 @@ COPY requirements.txt /tmp/requirements.txt
 ENV CFLAGS="-O3"
 
 # ⚡ CRITICAL: Clean install — no caches, no wheel re-use
-RUN pip install --no-cache-dir --no-binary :all: -r /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # ---------------------------------------------------------
 # D) Copy Application
