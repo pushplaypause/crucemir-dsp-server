@@ -1,0 +1,138 @@
+Folder PATH listing for volume VON
+Volume serial number is 52F9-9A4B
+C:.
+|   app.py
+|   Dockerfile
+|   repo.zip
+|   repo_tree.txt
+|   requirements.txt
+|   
++---album_master_service
+|       album_master_hq.py
+|       __init__.py
+|       
++---alignment_service
+|       lyric_alignment.py
+|       __init__.py
+|       
++---analog_master_service
+|       analog_master_handler.py
+|       __init__.py
+|       
++---analysis_service
+|       song_analyzer.py
+|       __init__.py
+|       
++---automix_service
+|       automix_handler.py
+|       __init__.py
+|       
++---chord_service
+|       chord_handler.py
+|       __init__.py
+|       
++---chorus_service
+|       chorus_detector.py
+|       __init__.py
+|       
++---cover_art_service
+|       __init__.py
+|       
++---demucs_service
+|       demucs_handler.py
+|       demucs_reverb_hq.py
+|       __init__.py
+|       
++---doubler_service
+|       doubler_handler.py
+|       __init__.py
+|       
++---dsp_service
+|       dsp_utils.py
+|       __init__.py
+|       
++---ffmpeg_service
+|       ffmpeg_handler.py
+|       zip_stems_hq.py
+|       __init__.py
+|       
++---ghost_mode_service
+|       ghost_mode_fast.py
+|       ghost_mode_handler.py
+|       ghost_mode_hq.py
+|       __init__.py
+|       
++---instrumental_master_service
+|       instrumental_master_hq.py
+|       __init__.py
+|       
++---librosa_service
+|       librosa_handler.py
+|       __init__.py
+|       
++---lyrics_service
+|       lyrics_handler.py
+|       __init__.py
+|       
++---mastering_service
+|       mastering_handler.py
+|       __init__.py
+|       
++---master_ai_service
+|       master_ai_handler.py
+|       __init__.py
+|       
++---melody_midi_service
+|       melody_midi_handler.py
+|       __init__.py
+|       
++---melody_service
+|       melody_handler.py
+|       __init__.py
+|       
++---musicgen_service
+|       musicgen_handler.py
+|       __init__.py
+|       
++---personas
+|       __init__.py
+|       
++---persona_service
+|       persona_analyzer.py
+|       persona_builder.py
+|       persona_cache.py
+|       persona_preview.py
+|       vocal_presets_hq.py
+|       __init__.py
+|       
++---pitch_service
+|       pitch_handler.py
+|       __init__.py
+|       
++---reverb_service
+|       impulse_reverb.py
+|       __init__.py
+|       
++---songwriting_service
+|       songwriting_handler.py
+|       __init__.py
+|       
++---sovits_service
+|       sovits_handler.py
+|       sovits_multiengine_hq.py
+|       sovits_multilayer.py
+|       sovits_quant.py
+|       __init__.py
+|       
++---timestretch_service
+|       timestretch_handler.py
+|       __init__.py
+|       
++---versioning_service
+|       version_handler.py
+|       __init__.py
+|       
+\---whisper_service
+        whisper_loader.py
+        __init__.py
+        
